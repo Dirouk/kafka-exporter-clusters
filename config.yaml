@@ -1,0 +1,25 @@
+listen_address: ":9308"
+metrics_path: "/metrics"
+refresh_interval: 30
+
+clusters:
+  - name: "production-cluster"
+    brokers:
+      - "kafka-prod-1:9092"
+      - "kafka-prod-2:9092"
+      - "kafka-prod-3:9092"
+    version: "2.8.0"
+    sasl_mechanism: "PLAIN"
+    sasl_username: "admin"
+    sasl_password: "password"
+
+  - name: "staging-cluster"
+    brokers:
+      - "kafka-staging-1:9092"
+      - "kafka-staging-2:9092"
+    version: "2.8.0"
+
+  - name: "development-cluster"
+    brokers:
+      - "localhost:9092"
+    version: "2.8.0"
