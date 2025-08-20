@@ -1,0 +1,30 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "kafka-exporter.fullname" . }}-config
+  labels:
+    {{- include "kafka-exporter.labels" . | nindent 4 }}
+data:
+  config.yaml: |
+    listen_address: {{ .Values.exporter.listenAddress }}
+    metrics_path: {{ .Values.exporter.metricsPath }}
+    refresh_interval: {{ .Values.exporter.refreshInterval }}
+    
+    clusters:
+    {{- range .Values.clusters }}
+    - name: {{ .name | quote }}
+      brokers:
+      {{- range .brokers }}
+      - {{ . | quote }}
+      {{- end }}
+      version: {{ .version | quote }}
+      {{- if .sasl.enabled }}
+      sasl_mechanism: "PLAIN"
+      sasl_username: {{ .sasl.username | quote }}
+      {{- end }}
+      {{- if .tls.enabled }}
+      tls_ca_file: "/etc/kafka-tls/{{ .name }}/ca.crt"
+      tls_cert_file: "/etc/kafka-tls/{{ .name }}/tls.crt"
+      tls_key_file: "/etc/kafka-tls/{{ .name }}/tls.key"
+      {{- end }}
+    {{- end }}
