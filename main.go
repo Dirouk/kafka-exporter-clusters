@@ -7,10 +7,11 @@ import (
 	"os/signal"
 	"syscall"
 
-	"your-project/collector"
-	"your-project/config"
+	"kafka-exporter-clusters/collector"
+	"kafka-exporter-clusters/config"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
@@ -21,25 +22,37 @@ func main() {
 		log.Fatalf("Failed to load config: %v", err)
 	}
 
-	// Создаем коллектор
-	collector, err := collector.NewClusterCollector(cfg)
+	// Создаем registry
+	registry := prometheus.NewRegistry()
+
+	// Регистрируем стандартные Go метрики
+	registry.MustRegister(
+		collectors.NewGoCollector(),
+		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
+	)
+
+	// Создаем и регистрируем наш кастомный коллектор
+	kafkaCollector, err := collector.NewClusterCollector(cfg)
 	if err != nil {
 		log.Fatalf("Failed to create collector: %v", err)
 	}
-	defer collector.Close()
+	defer kafkaCollector.Close()
+	registry.MustRegister(kafkaCollector)
 
-	// Регистрируем коллектор
-	prometheus.MustRegister(collector)
+	// Создаем handler с нашим registry
+	metricsHandler := promhttp.HandlerFor(registry, promhttp.HandlerOpts{})
 
 	// Настраиваем HTTP сервер
-	http.Handle(cfg.MetricsPath, promhttp.Handler())
+	http.Handle(cfg.MetricsPath, metricsHandler)
+
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`
 			<html>
-			<head><title>Kafka Exporter</title></head>
+			<head><title>Kafka Exporter Clusters</title></head>
 			<body>
-				<h1>Kafka Exporter</h1>
+				<h1>Kafka Exporter Clusters</h1>
 				<p><a href="` + cfg.MetricsPath + `">Metrics</a></p>
+				<p><a href="/health">Health</a></p>
 			</body>
 			</html>
 		`))
@@ -51,17 +64,19 @@ func main() {
 	})
 
 	// Запускаем сервер
+	log.Printf("Starting Kafka exporter on %s", cfg.ListenAddress)
+
+	// Канал для graceful shutdown
+	stopChan := make(chan os.Signal, 1)
+	signal.Notify(stopChan, os.Interrupt, syscall.SIGTERM)
+
 	go func() {
-		log.Printf("Starting Kafka exporter on %s", cfg.ListenAddress)
 		if err := http.ListenAndServe(cfg.ListenAddress, nil); err != nil {
 			log.Fatalf("Failed to start server: %v", err)
 		}
 	}()
 
-	// Ожидаем сигналов для graceful shutdown
-	signalChan := make(chan os.Signal, 1)
-	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)
-	<-signalChan
-
+	// Ожидаем сигнал завершения
+	<-stopChan
 	log.Println("Shutting down Kafka exporter...")
 }
