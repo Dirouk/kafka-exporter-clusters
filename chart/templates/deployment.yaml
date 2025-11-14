@@ -1,0 +1,110 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "kafka-exporter.fullname" . }}
+  labels:
+    {{- include "kafka-exporter.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "kafka-exporter.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "kafka-exporter.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "{{ .Values.service.port }}"
+        prometheus.io/path: "{{ .Values.exporter.metricsPath }}"
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "kafka-exporter.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /app/config.yaml
+              subPath: config.yaml
+            {{- range .Values.clusters }}
+            {{- if .tls.enabled }}
+            - name: {{ .name }}-tls
+              mountPath: /etc/kafka-tls/{{ .name }}
+            {{- end }}
+            {{- end }}
+          env:
+            {{- range .Values.clusters }}
+            {{- if .sasl.enabled }}
+            - name: KAFKA_{{ .name | upper }}_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "kafka-exporter.fullname" $ }}-secrets
+                  key: {{ .name }}-sasl-password
+            {{- end }}
+            {{- end }}
+          args:
+            - "--config=/app/config.yaml"
+            - "--log-level={{ .Values.exporter.logLevel }}"
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "kafka-exporter.fullname" . }}-config
+        {{- range .Values.clusters }}
+        {{- if .tls.enabled }}
+        - name: {{ .name }}-tls
+          secret:
+            secretName: {{ include "kafka-exporter.fullname" $ }}-secrets
+            items:
+              - key: {{ .name }}-ca.crt
+                path: ca.crt
+              - key: {{ .name }}-tls.crt
+                path: tls.crt
+              - key: {{ .name }}-tls.key
+                path: tls.key
+        {{- end }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

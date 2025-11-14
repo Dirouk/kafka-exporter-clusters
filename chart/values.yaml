@@ -1,0 +1,125 @@
+# Default values for kafka-exporter
+
+replicaCount: 1
+
+image:
+  repository: your-images
+  tag: v1.0
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext:
+  {}
+  # fsGroup: 2000
+
+securityContext:
+  {}
+  # capabilities:
+  #   drop:
+  #   - ALL
+  # readOnlyRootFilesystem: true
+  # runAsNonRoot: true
+  # runAsUser: 1000
+
+service:
+  type: ClusterIP
+  port: 9308
+  annotations: {}
+  labels: {}
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+    # kubernetes.io/ingress.class: nginx
+    # kubernetes.io/tls-acme: "true"
+  hosts:
+    - host: ingress
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+  #  - secretName: kafka-exporter-tls
+  #    hosts:
+  #      - kafka-exporter.local
+
+resources:
+  limits:
+    cpu: 200m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 100
+  targetCPUUtilizationPercentage: 80
+  # targetMemoryUtilizationPercentage: 80
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+# Конфигурация Kafka кластеров
+clusters:
+  - name: "kafka01"
+    brokers:
+      - "kafkal:9092"
+      - "kafka2.tc.egov.local:9092"
+      - "kafka3.tc.egov.local:9092"
+#    version: "2.8.0"
+    sasl:
+      enabled: false
+      username: ""
+      password: ""
+    tls:
+      enabled: false
+      caCert: ""
+      clientCert: ""
+      clientKey: ""
+
+  - name: "kafka02"
+    brokers:
+      - "kafka-staging-1:9092"
+      - "kafka-staging-2:9092"
+#    version: "2.8.0"
+    sasl:
+      enabled: false
+    tls:
+      enabled: false
+
+# Настройки экспортера
+exporter:
+  listenAddress: ":9308"
+  metricsPath: "/metrics"
+  refreshInterval: 30
+  logLevel: "info"
+
+# ServiceMonitor для Prometheus Operator
+serviceMonitor:
+  enabled: false
+  namespace: ""
+  labels: {}
+  interval: 30s
+  scrapeTimeout: 10s
+  honorLabels: false
+  additionalLabels: {}
+
+# Pushgateway настройки
+pushgateway:
+  enabled: false
